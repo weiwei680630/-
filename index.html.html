@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>映頤的呆呆蛇!</title>
+    <!-- 引入 Tailwind CSS 進行快速排版 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+TC:wght@400;700&display=swap');
+
+        :root {
+            /* 主題色系定義 */
+            --bg-color: #050a1f;      /* 深藍色背景 */
+            --grid-color: #1a234f;    /* 網格線顏色 */
+            --snake-color: #00f0ff;   /* 湖水綠蛇身 */
+            --snake-head: #ffffff;    /* 蛇頭亮白 */
+            --food-color: #ff007b;    /* 粉紅食物 */
+            --text-color: #ffffff;    /* 白色標題/文字 */
+            --accent-color: #ffd700;  /* 金色特效 */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            user-select: none; /* 防止誤觸選取文字 */
+        }
+
+        /* 背景網格特效 (已移除移動動畫，保持靜止) */
+        .cyber-grid {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.3;
+            z-index: -1;
+        }
+
+        #game-container {
+            position: relative;
+            background: rgba(5, 10, 31, 0.8);
+            border: 2px solid var(--snake-color);
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), inset 0 0 15px rgba(0, 240, 255, 0.1);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 95vw;
+            backdrop-filter: blur(5px);
+        }
+
+        /* 標題與數據列 */
+        .header-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 10px;
+        }
+
+        h1 {
+            font-weight: 900;
+            font-size: 1.5rem;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .stats-box {
+            display: flex;
+            gap: 20px;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 5px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-value {
+            color: var(--snake-color);
+            text-shadow: 0 0 5px var(--snake-color);
+            display: inline-block;
+            width: 50px; /* 加大並固定寬度，徹底防止外框伸縮 */
+            text-align: center;
+        }
+
+        .time-value {
+            color: var(--food-color);
+            text-shadow: 0 0 5px var(--food-color);
+            display: inline-block;
+            width: 50px; /* 加大並固定寬度，徹底防止外框伸縮 */
+            text-align: center;
+        }
+
+        canvas {
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 8px;
+            display: block;
+            margin: 0 auto;
+            /* 讓 Canvas 具備掃描線特效 */
+            background-image: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 240, 255, 0.05) 2px,
+                rgba(0, 240, 255, 0.05) 4px
+            );
+        }
+
+        /* 虛擬搖桿 (移動端) */
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(2, 60px);
+            gap: 10px;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        @media (min-width: 768px) {
+            .controls { display: none; } /* 電腦版隱藏虛擬搖桿 */
+        }
+
+        .btn-control {
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid var(--snake-color);
+            color: var(--snake-color);
+            border-radius: 12px;
+            font-size: 1.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.1s;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+            /* 阻止雙擊放大 */
+            touch-action: manipulation; 
+        }
+
+        .btn-control:active {
+            background: var(--snake-color);
+            color: var(--bg-color);
+            transform: scale(0.9);
+            box-shadow: 0 0 20px var(--snake-color);
+        }
+
+        .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-down { grid-column: 2; grid-row: 2; }
+        .btn-right { grid-column: 3; grid-row: 2; }
+
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(5, 10, 31, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 12px;
+            z-index: 10;
+            backdrop-filter: blur(8px);
+        }
+
+        .hidden { display: none !important; }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #00f0ff, #0088ff);
+            color: #fff;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 240, 255, 0.4);
+            font-family: inherit;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 240, 255, 0.6);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(1px);
+        }
+
+        .message-title {
+            font-size: 2.5rem;
+            color: var(--food-color);
+            text-shadow: 0 0 15px var(--food-color);
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .message-sub {
+            font-size: 1.2rem;
+            color: #aaa;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        /* 生命愛心動畫 */
+        @keyframes pulse-heart {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .heart {
+            color: #ff3366;
+            display: inline-block;
+        }
+        .heart.lost {
+            color: #333;
+            animation: none;
+        }
+        .warning-text {
+            color: #ff3366;
+            animation: pulse-heart 1s infinite;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- 網格背景 -->
+    <div class="cyber-grid"></div>
+
+    <div id="game-container">
+        <!-- 頂部資訊列 -->
+        <div class="header-panel">
+            <h1>Neon Snake</h1>
+            <div class="stats-box">
+                <div class="stat-item">
+                    <span>❤️</span>
+                    <span id="livesDisplay" class="stat-value" style="color: #ff3366;">3</span>
+                </div>
+                <div class="stat-item">
+                    <span>⏱️</span>
+                    <span id="timeDisplay" class="time-value">60</span>
+                </div>
+                <div class="stat-item">
+                    <span>🏆</span>
+                    <span id="scoreDisplay" class="stat-value">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 遊戲畫布 -->
+        <div style="position: relative;">
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- 開始畫面 -->
+            <div id="startScreen" class="overlay">
+                <h2 class="message-title" style="color: var(--snake-color); text-shadow: 0 0 15px var(--snake-color);">湖水綠貪食蛇</h2>
+                <p class="message-sub">🕒 限時 60 秒</p>
+                <p class="message-sub">❤️ 擁有 3 條生命</p>
+                <p class="message-sub">⌨️ 使用 WASD / 方向鍵移動</p>
+                <button class="btn-primary" id="startBtn">開始遊戲 START</button>
+            </div>
+
+            <!-- 遊戲結束/結算畫面 -->
+            <div id="gameOverScreen" class="overlay hidden">
+                <h2 id="endTitle" class="message-title">TIME UP!</h2>
+                <p class="message-sub" style="font-size: 1.5rem; color: #fff;">最終分數</p>
+                <p id="finalScore" class="message-title" style="font-size: 3.5rem; margin: 10px 0;"></p>
+                <button class="btn-primary" id="restartBtn">再次挑戰 RESTART</button>
+            </div>
+            
+            <!-- 損失生命提示畫面 (暫時顯示) -->
+            <div id="lifeLostScreen" class="overlay hidden" style="background: rgba(255, 0, 0, 0.3);">
+                <h2 class="message-title warning-text">CRASH!</h2>
+                <p class="message-sub" style="color: #fff; font-size: 1.5rem;">失去一條生命，準備重生...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 1. 初始化與全域變數 ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI 元素
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const livesDisplay = document.getElementById('livesDisplay');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const lifeLostScreen = document.getElementById('lifeLostScreen');
+        const endTitle = document.getElementById('endTitle');
+        const finalScore = document.getElementById('finalScore');
+        
+        // 遊戲設定常數
+        const GRID_SIZE = 20; // 每個網格的大小
+        let tileCountX, tileCountY; // 依據畫面大小計算出的網格數
+        const INITIAL_LIVES = 3;
+        const INITIAL_TIME = 60;
+        const BASE_SPEED = 120; // 毫秒/幀 (數值越小越快)
+
+        // 遊戲狀態變數
+        let snake = [];      // 蛇的身體陣列 [{x, y}]
+        let velocity = {x: 0, y: 0}; // 蛇的速度方向
+        let nextVelocity = {x: 0, y: 0}; // 緩衝下一步方向，防止快速按鍵導致自我反向吃
+        let food = {x: 0, y: 0};
+        
+        let score = 0;
+        let lives = INITIAL_LIVES;
+        let timeLeft = INITIAL_TIME;
+        
+        let gameLoopId;
+        let timerId;
+        let isGameRunning = false;
+        let lastRenderTime = 0;
+
+        // 顏色定義
+        const colorSnakeBody = '#00f0ff'; // 湖水綠
+        const colorSnakeHead = '#ffffff'; // 白色
+        const colorFood = '#ff007b';      // 粉紅色霓虹
+
+        // 音效系統 (使用簡單 Web Audio API 合成音效，不依賴外部檔案)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            
+            if (type === 'eat') {
+                // 吃食物音效：短促的上升音調
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'crash') {
+                // 撞擊/損失生命音效：低沉噪音
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                gainNode.gain.setValueAtTime(0.5, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'gameover') {
+                // 遊戲結束音效：下降音調
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 1);
+                gainNode.gain.setValueAtTime(0.4, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 1);
+                osc.start(now);
+                osc.stop(now + 1);
+            }
+        }
+
+        // 響應式調整 Canvas 大小
+        function resizeCanvas() {
+            // 決定畫布大小 (稍微小於外框，保持正方形或適當比例)
+            const containerWidth = document.getElementById('game-container').clientWidth;
+            // 扣除 padding 與間距估算
+            let size = Math.min(window.innerWidth * 0.9, window.innerHeight * 0.55);
+            if (size > 500) size = 500; // 最大限制
+            
+            // 確保大小是 GRID_SIZE 的整數倍，避免邊緣破圖
+            size = Math.floor(size / GRID_SIZE) * GRID_SIZE;
+            
+            canvas.width = size;
+            canvas.height = size;
+            
+            tileCountX = canvas.width / GRID_SIZE;
+            tileCountY = canvas.height / GRID_SIZE;
+        }
+        
+        window.addEventListener('resize', () => {
+            if (!isGameRunning) resizeCanvas();
+        });
+        resizeCanvas();
+
+        // 初始化遊戲狀態
+        function initGame() {
+            resizeCanvas();
+            score = 0;
+            lives = INITIAL_LIVES;
+            timeLeft = INITIAL_TIME;
+            
+            updateStatsUI();
+            
+            // 初始化蛇的位置 (置中，長度3)
+            const startX = Math.floor(tileCountX / 2);
+            const startY = Math.floor(tileCountY / 2);
+            snake = [
+                {x: startX, y: startY},
+                {x: startX, y: startY + 1},
+                {x: startX, y: startY + 2}
+            ];
+            
+            // 預設往上走
+            velocity = {x: 0, y: -1};
+            nextVelocity = {x: 0, y: -1};
+            
+            placeFood();
+        }
+
+        // 開始/重新開始遊戲
+        function startGame() {
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            
+            initGame();
+            isGameRunning = true;
+            lastRenderTime = 0;
+            
+            // 啟動時間倒數
+            clearInterval(timerId);
+            timerId = setInterval(updateTimer, 1000);
+            
+            // 啟動遊戲迴圈 (使用 requestAnimationFrame 取代 setInterval 以獲得更平滑的效果)
+            window.requestAnimationFrame(gameLoop);
+            
+            // 嘗試喚醒 AudioContext
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        // 倒數計時器邏輯
+        function updateTimer() {
+            if (!isGameRunning) return;
+            
+            timeLeft--;
+            timeDisplay.textContent = timeLeft;
+            
+            // 時間快到時改變顏色警告
+            if (timeLeft <= 10) {
+                timeDisplay.style.color = '#ff3366';
+                timeDisplay.style.textShadow = '0 0 10px #ff3366';
+            } else {
+                timeDisplay.style.color = 'var(--food-color)';
+                timeDisplay.style.textShadow = '0 0 5px var(--food-color)';
+            }
+            
+            if (timeLeft <= 0) {
+                endGame("TIME UP!");
+            }
+        }
+
+        // 更新 UI 顯示
+        function updateStatsUI() {
+            scoreDisplay.textContent = score;
+            livesDisplay.textContent = lives;
+            timeDisplay.textContent = timeLeft;
+        }
+
+        // 放置食物 (確保不會放在蛇身上)
+        function placeFood() {
+            let valid = false;
+            while (!valid) {
+                food = {
+                    x: Math.floor(Math.random() * tileCountX),
+                    y: Math.floor(Math.random() * tileCountY)
+                };
+                valid = true;
+                // 檢查是否與蛇身重疊
+                for (let segment of snake) {
+                    if (segment.x === food.x && segment.y === food.y) {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 主遊戲迴圈
+        function gameLoop(currentTime) {
+            if (!isGameRunning) return;
+            
+            window.requestAnimationFrame(gameLoop);
+            
+            // 控制遊戲速度
+            const secondsSinceLastRender = (currentTime - lastRenderTime);
+            // 隨著分數變高，速度微微變快
+            const currentSpeed = BASE_SPEED - Math.min(score, 50); 
+            
+            if (secondsSinceLastRender < currentSpeed) return;
+            
+            lastRenderTime = currentTime;
+            
+            updateLogic();
+            draw();
+        }
+
+        // 更新物理與邏輯
+        function updateLogic() {
+            // 更新真實速度
+            velocity = {...nextVelocity};
+            
+            // 計算新蛇頭位置
+            const head = {
+                x: snake[0].x + velocity.x,
+                y: snake[0].y + velocity.y
+            };
+            
+            // 穿牆功能：超出邊界時，從對向邊界出現
+            if (head.x < 0) head.x = tileCountX - 1;
+            else if (head.x >= tileCountX) head.x = 0;
+            
+            if (head.y < 0) head.y = tileCountY - 1;
+            else if (head.y >= tileCountY) head.y = 0;
+            
+            // 檢查是否撞到自己
+            if (checkCollision(head)) {
+                handleCrash();
+                return;
+            }
+            
+            // 將新蛇頭加入陣列最前方
+            snake.unshift(head);
+            
+            // 檢查是否吃到食物
+            if (head.x === food.x && head.y === food.y) {
+                playSound('eat');
+                score += 10;
+                updateStatsUI();
+                placeFood();
+                // 吃到食物不 pop 尾巴，蛇會變長
+            } else {
+                // 沒吃到食物，移除尾巴
+                snake.pop();
+            }
+        }
+
+        // 碰撞偵測
+        function checkCollision(head) {
+            // 撞牆檢查已移除，現在支援穿牆
+            
+            // 撞自己身體檢查
+            for (let segment of snake) {
+                if (head.x === segment.x && head.y === segment.y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 處理撞擊 (扣血機制)
+        function handleCrash() {
+            playSound('crash');
+            isGameRunning = false; // 暫停遊戲迴圈
+            lives--;
+            updateStatsUI();
+            
+            if (lives <= 0) {
+                endGame("GAME OVER");
+            } else {
+                // 還有生命，顯示重生畫面並短暫暫停
+                lifeLostScreen.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    lifeLostScreen.classList.add('hidden');
+                    respawnSnake();
+                }, 1500);
+            }
+        }
+
+        // 蛇重生邏輯 (保留當前長度，重置位置到中央)
+        function respawnSnake() {
+            const currentLength = snake.length;
+            const startX = Math.floor(tileCountX / 2);
+            const startY = Math.floor(tileCountY / 2);
+            
+            snake = [];
+            for(let i=0; i<currentLength; i++) {
+                // 為了避免蛇太長超出邊界，做個簡單排列限制
+                snake.push({x: startX, y: startY + i});
+            }
+            
+            velocity = {x: 0, y: -1};
+            nextVelocity = {x: 0, y: -1};
+            
+            isGameRunning = true;
+            lastRenderTime = performance.now();
+            window.requestAnimationFrame(gameLoop);
+        }
+
+        // 結束遊戲
+        function endGame(titleText) {
+            isGameRunning = false;
+            clearInterval(timerId);
+            playSound('gameover');
+            
+            endTitle.textContent = titleText;
+            endTitle.style.color = (titleText === "TIME UP!") ? "#ffd700" : "#ff3366";
+            finalScore.textContent = score;
+            
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        // 繪製畫面
+        function draw() {
+            // 清除畫布 (保留透明度以產生些微拖影效果)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            drawGrid();
+            drawFood();
+            drawSnake();
+        }
+
+        // 繪製輔助網格線 (增加科技感)
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(0, 240, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for(let i=0; i<=tileCountX; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * GRID_SIZE, 0);
+                ctx.lineTo(i * GRID_SIZE, canvas.height);
+                ctx.stroke();
+            }
+            for(let i=0; i<=tileCountY; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, i * GRID_SIZE);
+                ctx.lineTo(canvas.width, i * GRID_SIZE);
+                ctx.stroke();
+            }
+        }
+
+        // 繪製粉紅霓虹食物
+        function drawFood() {
+            const x = food.x * GRID_SIZE;
+            const y = food.y * GRID_SIZE;
+            const size = GRID_SIZE - 2;
+            const center = size / 2;
+            
+            ctx.save();
+            ctx.translate(x + 1, y + 1);
+            
+            // 發光特效
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = colorFood;
+            ctx.fillStyle = colorFood;
+            
+            // 畫成鑽石或圓形
+            ctx.beginPath();
+            ctx.arc(center, center, center - 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 中心亮點
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.arc(center - 2, center - 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        // 繪製湖水綠蛇
+        function drawSnake() {
+            snake.forEach((segment, index) => {
+                const x = segment.x * GRID_SIZE;
+                const y = segment.y * GRID_SIZE;
+                
+                ctx.save();
+                ctx.translate(x, y);
+                
+                // 發光特效 (只給蛇頭強發光，身體弱發光以提升效能)
+                if (index === 0) {
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = colorSnakeBody;
+                    ctx.fillStyle = colorSnakeHead; // 蛇頭白色
+                } else {
+                    ctx.shadowBlur = 5;
+                    ctx.shadowColor = colorSnakeBody;
+                    // 身體有漸層或純湖水綠
+                    ctx.fillStyle = colorSnakeBody;
+                }
+                
+                // 畫圓角矩形蛇身
+                const padding = 1;
+                const size = GRID_SIZE - padding * 2;
+                
+                ctx.beginPath();
+                ctx.roundRect(padding, padding, size, size, 4);
+                ctx.fill();
+                
+                // 如果是蛇頭，畫上眼睛
+                if (index === 0) {
+                    ctx.fillStyle = '#050a1f'; // 眼睛顏色
+                    ctx.shadowBlur = 0;
+                    const eyeSize = 3;
+                    // 根據移動方向決定眼睛位置
+                    if (velocity.x === 1) { // 右
+                        ctx.fillRect(size - 4, 4, eyeSize, eyeSize);
+                        ctx.fillRect(size - 4, size - 6, eyeSize, eyeSize);
+                    } else if (velocity.x === -1) { // 左
+                        ctx.fillRect(2, 4, eyeSize, eyeSize);
+                        ctx.fillRect(2, size - 6, eyeSize, eyeSize);
+                    } else if (velocity.y === -1) { // 上
+                        ctx.fillRect(4, 2, eyeSize, eyeSize);
+                        ctx.fillRect(size - 6, 2, eyeSize, eyeSize);
+                    } else if (velocity.y === 1) { // 下
+                        ctx.fillRect(4, size - 4, eyeSize, eyeSize);
+                        ctx.fillRect(size - 6, size - 4, eyeSize, eyeSize);
+                    }
+                }
+                
+                ctx.restore();
+            });
+        }
+        
+        // 圓角矩形 Polyfill (針對較舊瀏覽器)
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2;
+                if (h < 2 * r) r = h / 2;
+                this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r);
+                this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r);
+                this.arcTo(x, y, x + w, y, r);
+                this.closePath();
+                return this;
+            }
+        }
+
+        // --- 鍵盤與按鈕控制事件 ---
+        function changeDirection(newVx, newVy) {
+            // 防止 180 度直接回頭 (除非長度只有 1)
+            if (snake.length > 1) {
+                if (newVx !== 0 && velocity.x === -newVx) return;
+                if (newVy !== 0 && velocity.y === -newVy) return;
+            }
+            nextVelocity = {x: newVx, y: newVy};
+        }
+
+        window.addEventListener('keydown', (e) => {
+            // 防止方向鍵捲動視窗
+            if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+            
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    changeDirection(0, -1);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    changeDirection(0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    changeDirection(-1, 0);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    changeDirection(1, 0);
+                    break;
+            }
+        });
+
+        // 開始與重新開始按鈕
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+
+        // 初始化背景繪製 (僅顯示一次等待開始)
+        draw();
+    </script>
+</body>
+</html>
